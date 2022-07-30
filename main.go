@@ -50,7 +50,7 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 		return
 	}
 
-	// Ignore all messages with the discriminator #0000.
+	// Ignore all messages with the discriminator #0000 (Webhooks).
 	if message.Author.Discriminator == "0000" {
 		return
 	}
