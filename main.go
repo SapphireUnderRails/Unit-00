@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,8 +15,7 @@ func main() {
 	// Create a new Discord session using the provided bot token.
 	session, err := discordgo.New("Bot " + "MTAwMTA3Njk0MjQ3NDMyMjAxMQ.GtnF2E.-7LU7kCBWdxLWxDrQ2Zk-aIIPD0hYaDcd39ECU")
 	if err != nil {
-		fmt.Println("Error creating Discord session,", err)
-		return
+		log.Fatal("Error creating Discord session,", err)
 	}
 
 	// Register a message create and channel create callback function.
@@ -28,8 +28,7 @@ func main() {
 	// Now we open a websocket connection to Discord and begin listening.
 	err = session.Open()
 	if err != nil {
-		fmt.Println("Error opening Discord session,", err)
-		return
+		log.Fatal("Error opening Discord session,", err)
 	}
 
 	// Wait here until CTRL-C or other term signal is received.
