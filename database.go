@@ -21,7 +21,7 @@ func message_database() sql.DB {
 	// Open a connection to the discord_messages database.
 	db, err := sql.Open("mysql", configuration.FormatDSN())
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	return *db
