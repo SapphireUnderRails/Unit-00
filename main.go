@@ -59,6 +59,7 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 	channel, err := session.Channel(message.ChannelID)
 	if err != nil {
 		fmt.Println("Could not retrieve channel details: ", err)
+		return
 	}
 
 	//Formatted output.
@@ -94,7 +95,12 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 	params.AvatarURL = message.Author.AvatarURL(message.Author.Avatar)
 
 	// Executing the webhook that will mimic the user.
-	session.WebhookExecute(webhook_id, webhook_token, true, &params)
+	webhook_message, err := session.WebhookExecute(webhook_id, webhook_token, true, &params)
+	if err != nil {
+		fmt.Println("Could not execute webhook: ", err)
+		return
+	}
+	fmt.Println(webhook_message)
 }
 
 // This function will be called every time a new channel is made.
