@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -21,8 +22,12 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 		return
 	}
 
-	// Ignore all messages with no content in them.
-	if message.Content == "" {
+	// Filter out all URLs in the message.
+	re := regexp.MustCompile(`([\w+]+\:\/\/)?([\w\d-]+\.)*[\w-]+[\.\:]\w+([\/\?\=\&\#\.]?[\w-]+)*\/?`)
+	message_content := re.ReplaceAllString(message.Content, "")
+
+	// Ultimately ignore all messages with no content in them.
+	if message_content == "" {
 		return
 	}
 
@@ -44,13 +49,41 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 
 	// Store the message data into the table.
 	query = fmt.Sprintf(`INSERT INTO user_%s(message_id, channel_id, content) VALUES("%s", "%s", "%s");`,
-		message.Author.ID, message.ID, message.ChannelID, message.Content)
+		message.Author.ID, message.ID, message.ChannelID, message_content)
 	result, err = message_database.Exec(query)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	log.Println(result)
+
+	// Grab all the user's messages from the database.
+	query = fmt.Sprintf(`SELECT content FROM user_%s;`, message.Author.ID)
+	rows, err := message_database.Query(query)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Add all the snagged messages to one giant string.
+	content := ""
+	for rows.Next() {
+		var message string
+		rows.Scan(&message)
+		content = content + message + " "
+	}
+
+	// Create the Markov chain with an order of 3 to mimic the user.
+	chain := NewChain(2)
+
+	// Feed in the giant string of messages for training.
+	chain.Build(strings.NewReader(content))
+
+	// Generate the chain.
+	content_chain := chain.Generate(64)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(content_chain)
 
 	// Retrieves all the information of the channel the message was created in.
 	channel, err := session.Channel(message.ChannelID)
@@ -75,35 +108,6 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 		}
 	}
 
-	// Grab all the user's messages from the database.
-	query = fmt.Sprintf(`SELECT content FROM user_%s;`, message.Author.ID)
-	rows, err := message_database.Query(query)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	// Add all the snagged messages to one giant string.
-	content := ""
-	for rows.Next() {
-		var message string
-		rows.Scan(&message)
-		content = content + message + " "
-	}
-
-	// Create the Markov chain with an order of 3 to mimic the user.
-	chain := NewChain(1)
-
-	// Feed in the giant string of messages for training.
-	chain.Build(strings.NewReader(content))
-
-	// Generate the chain.
-	content_chain := chain.Generate(16)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
 	// Setting the parameters for the webhook that will mimic the user.
 	params := discordgo.WebhookParams{}
 	params.Content = content_chain
@@ -111,10 +115,9 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 	params.AvatarURL = message.Author.AvatarURL(message.Author.Avatar)
 
 	// Executing the webhook that will mimic the user.
-	webhook_message, err := session.WebhookExecute(webhook_id, webhook_token, true, &params)
+	_, err = session.WebhookExecute(webhook_id, webhook_token, true, &params)
 	if err != nil {
-		fmt.Println("Could not execute webhook: ", err)
+		log.Println(err)
 		return
 	}
-	log.Println(webhook_message)
 }
