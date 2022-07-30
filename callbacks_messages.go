@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -19,6 +21,37 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 		return
 	}
 
+	// Ignore all messages with no content in them.
+	if message.Content == "" {
+		return
+	}
+
+	// Create a database connection.
+	message_database := message_database()
+
+	// Create a table (if it doesn't already exist) in the database specific to the user to store the message in.
+	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS user_%s
+	(id BIGINT unsigned AUTO_INCREMENT PRIMARY KEY,
+	message_id BIGINT NOT NULL,
+	channel_id BIGINT NOT NULL,
+	content LONGTEXT NOT NULL);`, message.Author.ID)
+	result, err := message_database.Exec(query)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	log.Println(result)
+
+	// Store the message data into the table.
+	query = fmt.Sprintf(`INSERT INTO user_%s(message_id, channel_id, content) VALUES("%s", "%s", "%s");`,
+		message.Author.ID, message.ID, message.ChannelID, message.Content)
+	result, err = message_database.Exec(query)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	log.Println(result)
+
 	// Retrieves all the information of the channel the message was created in.
 	channel, err := session.Channel(message.ChannelID)
 	if err != nil {
@@ -26,43 +59,62 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 		return
 	}
 
-	//Formatted output.
-	fmt.Printf("----------\nCreated Message Details:\nChannel: %s\nChannel ID: %s\nAuthor: %s#%s\nAuthor ID: %s\nContent: %s\nTime: %d\n",
-		channel.Name,
-		channel.ID,
-		message.Author.Username,
-		message.Author.Discriminator,
-		message.Author.ID,
-		message.Content,
-		message.Timestamp.Unix())
+	// Retrieves all the webhooks attached to the channel.
+	webhooks, err := session.ChannelWebhooks(channel.ID)
+	if err != nil {
+		fmt.Println("Could not retrieve channel webhooks: ", err)
+		return
+	}
 
-	// // Retrieves all the webhooks attached to the channel.
-	// webhooks, err := session.ChannelWebhooks(channel.ID)
-	// if err != nil {
-	// 	fmt.Println("Could not retrieve channel webhooks: ", err)
-	// 	return
-	// }
+	// Snagging the Webhook ID and Webhook Token to mimic the user.
+	var webhook_id, webhook_token string
+	for _, webhooks := range webhooks {
+		if webhooks.Name == fmt.Sprintf("%s-mimic", channel.Name) {
+			webhook_id = webhooks.ID
+			webhook_token = webhooks.Token
+		}
+	}
 
-	// // Snagging the Webhook ID and Webhook Token to mimic the user.
-	// var webhook_id, webhook_token string
-	// for _, webhooks := range webhooks {
-	// 	if webhooks.Name == channel.Name {
-	// 		webhook_id = webhooks.ID
-	// 		webhook_token = webhooks.Token
-	// 	}
-	// }
+	// Grab all the user's messages from the database.
+	query = fmt.Sprintf(`SELECT content FROM user_%s;`, message.Author.ID)
+	rows, err := message_database.Query(query)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 
-	// // Setting the parameters for the webhook that will mimic the user.
-	// params := discordgo.WebhookParams{}
-	// params.Content = message.Content
-	// params.Username = message.Author.Username
-	// params.AvatarURL = message.Author.AvatarURL(message.Author.Avatar)
+	// Add all the snagged messages to one giant string.
+	content := ""
+	for rows.Next() {
+		var message string
+		rows.Scan(&message)
+		content = content + message + " "
+	}
 
-	// // Executing the webhook that will mimic the user.
-	// webhook_message, err := session.WebhookExecute(webhook_id, webhook_token, true, &params)
-	// if err != nil {
-	// 	fmt.Println("Could not execute webhook: ", err)
-	// 	return
-	// }
-	// fmt.Println(webhook_message)
+	// Create the Markov chain with an order of 3 to mimic the user.
+	chain := NewChain(1)
+
+	// Feed in the giant string of messages for training.
+	chain.Build(strings.NewReader(content))
+
+	// Generate the chain.
+	content_chain := chain.Generate(16)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// Setting the parameters for the webhook that will mimic the user.
+	params := discordgo.WebhookParams{}
+	params.Content = content_chain
+	params.Username = message.Author.Username
+	params.AvatarURL = message.Author.AvatarURL(message.Author.Avatar)
+
+	// Executing the webhook that will mimic the user.
+	webhook_message, err := session.WebhookExecute(webhook_id, webhook_token, true, &params)
+	if err != nil {
+		fmt.Println("Could not execute webhook: ", err)
+		return
+	}
+	log.Println(webhook_message)
 }
