@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -10,10 +11,26 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// Making a struct to hold the token data.
+type Token struct {
+	Token string
+}
+
 func main() {
 
+	// Retrieve the token from token.json file.
+	fileContent, err := os.ReadFile("token.json")
+	if err != nil {
+		log.Println("Could not open token file.")
+		log.Fatal(err)
+	}
+
+	// Unmarshal the token from the file contnet to grab the token.
+	var token Token
+	json.Unmarshal(fileContent, &token)
+
 	// Create a new Discord session using the provided bot token.
-	session, err := discordgo.New("Bot " + "MTAwMTA3Njk0MjQ3NDMyMjAxMQ.GtnF2E.-7LU7kCBWdxLWxDrQ2Zk-aIIPD0hYaDcd39ECU")
+	session, err := discordgo.New("Bot " + token.Token)
 	if err != nil {
 		log.Fatal("Error creating Discord session,", err)
 	}
