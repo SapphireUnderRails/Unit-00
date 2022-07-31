@@ -20,15 +20,18 @@ type Token struct {
 	Token string
 }
 
-//Making a struct to hold the MySQL server logon parameters.
+// Making a struct to hold the MySQL server logon parameters.
 type Parameters struct {
 	Username string
 	Password string
 	Database string
 }
 
-//Global variable to hold database connection, because why not?
+// Global variable to hold database connection, because why not?
 var db *sql.DB
+
+// Global variable to hold the regex string, because why not?
+var re *regexp.Regexp
 
 func main() {
 
@@ -68,6 +71,12 @@ func main() {
 	// Unmarshal the token from the file contnet to grab the token.
 	var token Token
 	json.Unmarshal(discord_token, &token)
+
+	// Compile regex string.
+	re, err = regexp.Compile(`([\w+]+\:\/\/)?([\w\d-]+\.)*[\w-]+[\.\:]\w+([\/\?\=\&\#\.]?[\w-]+)*\/?`)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Create a new Discord session using the provided bot token.
 	session, err := discordgo.New("Bot " + token.Token)
@@ -124,10 +133,6 @@ func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate)
 	}
 
 	// Filter out all URLs in the message.
-	re, err := regexp.Compile(`([\w+]+\:\/\/)?([\w\d-]+\.)*[\w-]+[\.\:]\w+([\/\?\=\&\#\.]?[\w-]+)*\/?`)
-	if err != nil {
-		log.Println(err)
-	}
 	message_content := re.ReplaceAllString(message.Content, "")
 
 	// Ultimately ignore all messages with no content in them.
