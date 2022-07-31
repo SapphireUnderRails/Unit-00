@@ -24,7 +24,7 @@ func message_database() sql.DB {
 		log.Fatal(err)
 	}
 
-	// Unmarshal the token from the file contnet to grab the token.
+	// Unmarshal the token from the file contnet to grab the configuration information.
 	var config Config
 	json.Unmarshal(fileContent, &config)
 
